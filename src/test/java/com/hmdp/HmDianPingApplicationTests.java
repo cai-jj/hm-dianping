@@ -1,15 +1,13 @@
 package com.hmdp;
 
-import cn.hutool.core.date.DateTime;
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.RedisData;
 import com.hmdp.utils.RedisIdWorker;
-import javafx.util.converter.LocalDateTimeStringConverter;
-import org.apache.tomcat.jni.Local;
 import org.junit.jupiter.api.Test;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,6 +18,7 @@ import java.time.ZoneOffset;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 
@@ -32,7 +31,8 @@ class HmDianPingApplicationTests {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
-
+    @Resource
+    private RedissonClient redissonClient;
 
     @Test
     void test() {
@@ -61,7 +61,7 @@ class HmDianPingApplicationTests {
     @Test
     void test2() {
 
-        LocalDateTime time = LocalDateTime.of(2024, 1, 1,0, 0,0);
+        LocalDateTime time = LocalDateTime.of(2024, 1, 1, 0, 0, 0);
 
         long second = time.toEpochSecond(ZoneOffset.UTC);
         System.out.println(second);
@@ -96,5 +96,22 @@ class HmDianPingApplicationTests {
         ClassPathResource classPathResource = new ClassPathResource("unlock.lua");
         System.out.println(classPathResource);
         System.out.println(classPathResource.getFilename());
+    }
+
+    @Test
+    void testRedisson() {
+        RLock lock = redissonClient.getLock("anyLock");
+
+        try {
+            boolean isLock = lock.tryLock(1, 10, TimeUnit.SECONDS);
+            if (isLock) {
+                System.out.println("执行...");
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            System.out.println("释放锁");
+            lock.unlock();
+        }
     }
 }

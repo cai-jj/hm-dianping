@@ -11,6 +11,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -37,6 +40,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private RedissonClient redissonClient;
 
 //    //乐观锁解决超卖问题 CAS
 //    @Override
@@ -123,7 +128,44 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 //
 //    }
 
-    //使用分布式锁
+//    //使用分布式锁
+//    @Override
+//    public Result seckillVoucher(Long voucherId) {
+//        // 1.查询优惠券
+//        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+//        // 2.判断秒杀是否开始
+//        if (voucher.getBeginTime().isAfter(LocalDateTime.now())) {
+//            // 尚未开始
+//            return Result.fail("秒杀尚未开始！");
+//        }
+//        // 3.判断秒杀是否已经结束
+//        if (voucher.getEndTime().isBefore(LocalDateTime.now())) {
+//            // 尚未开始
+//            return Result.fail("秒杀已经结束！");
+//        }
+//        // 4.判断库存是否充足
+//        if (voucher.getStock() < 1) {
+//            // 库存不足
+//            return Result.fail("库存不足！");
+//        }
+//        //5.创建订单，保证一人一单
+//        Long userId = UserHolder.getUser().getId();
+//        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+//        boolean isLock = lock.tryLock(120);
+//        try {
+//            if(isLock) {
+//                log.debug("获得锁");
+//                VoucherOrderServiceImpl currentProxy = (VoucherOrderServiceImpl) AopContext.currentProxy();
+//                return currentProxy.createVoucherOrder(voucherId);
+//            } else {
+//                return Result.fail("不允许重复下单");
+//            }
+//        } finally {
+//            lock.unLock();
+//        }
+//    }
+
+    //使用redisson分布式锁
     @Override
     public Result seckillVoucher(Long voucherId) {
         // 1.查询优惠券
@@ -145,8 +187,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
         //5.创建订单，保证一人一单
         Long userId = UserHolder.getUser().getId();
-        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
-        boolean isLock = lock.tryLock(120);
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+
+        boolean isLock = lock.tryLock();
         try {
             if(isLock) {
                 log.debug("获得锁");
@@ -156,7 +199,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                 return Result.fail("不允许重复下单");
             }
         } finally {
-            lock.unLock();
+            lock.unlock();
         }
     }
 
