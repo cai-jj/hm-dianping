@@ -1,10 +1,14 @@
 package com.hmdp;
 
+import cn.hutool.core.date.DateTime;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.RedisData;
+import com.hmdp.utils.RedisIdWorker;
+import javafx.util.converter.LocalDateTimeStringConverter;
+import org.apache.tomcat.jni.Local;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -12,6 +16,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 
@@ -23,6 +30,8 @@ class HmDianPingApplicationTests {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+
 
     @Test
     void test() {
@@ -50,8 +59,34 @@ class HmDianPingApplicationTests {
 
     @Test
     void test2() {
-        LocalDateTime now = LocalDateTime.now();
-        long second = now.toEpochSecond(ZoneOffset.UTC);
+
+        LocalDateTime time = LocalDateTime.of(2024, 1, 1,0, 0,0);
+
+        long second = time.toEpochSecond(ZoneOffset.UTC);
         System.out.println(second);
+
+
+    }
+
+    @Test
+    void testIdWorker() throws InterruptedException {
+        RedisIdWorker redisIdWorker = new RedisIdWorker(stringRedisTemplate);
+        ExecutorService es = Executors.newFixedThreadPool(500);
+        CountDownLatch latch = new CountDownLatch(300);
+
+        Runnable task = () -> {
+            for (int i = 0; i < 100; i++) {
+                long id = redisIdWorker.nextId("order");
+                System.out.println("id = " + id);
+            }
+            latch.countDown();
+        };
+        long begin = System.currentTimeMillis();
+        for (int i = 0; i < 300; i++) {
+            es.submit(task);
+        }
+        latch.await();
+        long end = System.currentTimeMillis();
+        System.out.println("time = " + (end - begin));
     }
 }
