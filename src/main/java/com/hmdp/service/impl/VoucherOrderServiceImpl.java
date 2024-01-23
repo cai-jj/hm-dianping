@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.BooleanUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
@@ -8,6 +9,7 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -87,7 +89,41 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 //        return Result.ok(orderId);
 //    }
 
-    //悲观锁解决一人一单问题 synchronized
+//    //悲观锁解决一人一单问题 synchronized
+//    @Override
+//    public Result seckillVoucher(Long voucherId) {
+//        // 1.查询优惠券
+//        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+//        // 2.判断秒杀是否开始
+//        if (voucher.getBeginTime().isAfter(LocalDateTime.now())) {
+//            // 尚未开始
+//            return Result.fail("秒杀尚未开始！");
+//        }
+//        // 3.判断秒杀是否已经结束
+//        if (voucher.getEndTime().isBefore(LocalDateTime.now())) {
+//            // 尚未开始
+//            return Result.fail("秒杀已经结束！");
+//        }
+//        // 4.判断库存是否充足
+//        if (voucher.getStock() < 1) {
+//            // 库存不足
+//            return Result.fail("库存不足！");
+//        }
+//        //5.创建订单，保证一人一单
+//        //存在并发问题，没有创建订单，一个用户发起多个线程同时查询，都满足条件，就会创建多个订单，必须加锁
+//        Long userId = UserHolder.getUser().getId();
+//        //必须使用intern方法，不然每次都是new String()，锁不一样，只使用userId也不行
+//        //使用userId加锁，降低锁粒度
+//        synchronized (userId.toString().intern()) {
+//            //获取代理对象
+//            VoucherOrderServiceImpl currentProxy = (VoucherOrderServiceImpl) AopContext.currentProxy();
+//            return currentProxy.createVoucherOrder(voucherId);
+//        }
+//
+//
+//    }
+
+    //使用分布式锁
     @Override
     public Result seckillVoucher(Long voucherId) {
         // 1.查询优惠券
@@ -108,17 +144,20 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail("库存不足！");
         }
         //5.创建订单，保证一人一单
-        //存在并发问题，没有创建订单，一个用户发起多个线程同时查询，都满足条件，就会创建多个订单，必须加锁
         Long userId = UserHolder.getUser().getId();
-        //必须使用intern方法，不然每次都是new String()，锁不一样，只使用userId也不行
-        //使用userId加锁，降低锁粒度
-        synchronized (userId.toString().intern()) {
-            //获取代理对象
-            VoucherOrderServiceImpl currentProxy = (VoucherOrderServiceImpl) AopContext.currentProxy();
-            return currentProxy.createVoucherOrder(voucherId);
+        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        boolean isLock = lock.tryLock(120);
+        try {
+            if(isLock) {
+                log.debug("获得锁");
+                VoucherOrderServiceImpl currentProxy = (VoucherOrderServiceImpl) AopContext.currentProxy();
+                return currentProxy.createVoucherOrder(voucherId);
+            } else {
+                return Result.fail("不允许重复下单");
+            }
+        } finally {
+            lock.unLock();
         }
-
-
     }
 
 

@@ -11,6 +11,7 @@ import javafx.util.converter.LocalDateTimeStringConverter;
 import org.apache.tomcat.jni.Local;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import javax.annotation.Resource;
@@ -88,5 +89,12 @@ class HmDianPingApplicationTests {
         latch.await();
         long end = System.currentTimeMillis();
         System.out.println("time = " + (end - begin));
+    }
+
+    @Test
+    void testPath() {
+        ClassPathResource classPathResource = new ClassPathResource("unlock.lua");
+        System.out.println(classPathResource);
+        System.out.println(classPathResource.getFilename());
     }
 }
