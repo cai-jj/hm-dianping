@@ -64,7 +64,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 //        stringRedisTemplate.expire(key, CACHE_SHOP_TTL, TimeUnit.MINUTES);
 //        return Result.ok(shop);
 
-        Shop shop = queryWithLogicTime(id);
+        Shop shop = queryWithMutex(id);
         if(shop == null) {
             return Result.fail("店铺不存在");
         }
