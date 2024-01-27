@@ -10,17 +10,22 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.geo.Point;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
+import static com.hmdp.utils.RedisConstants.SHOP_GEO_KEY;
 
 @SpringBootTest
 class HmDianPingApplicationTests {
@@ -33,6 +38,7 @@ class HmDianPingApplicationTests {
 
     @Resource
     private RedissonClient redissonClient;
+
 
     @Test
     void test() {
@@ -113,5 +119,24 @@ class HmDianPingApplicationTests {
             System.out.println("释放锁");
             lock.unlock();
         }
+    }
+
+    //存入地理坐标，按照店铺类型进行存放
+    @Test
+    void loadShopData() {
+        List<Shop> shopList = shopService.list();
+        //按照店铺类型分类
+        Map<Long, List<Shop>> map = shopList.stream().collect(Collectors.groupingBy(Shop::getTypeId));
+        //写入redis
+        for (Map.Entry<Long, List<Shop>> entry : map.entrySet()) {
+            Long typeId = entry.getKey();
+            String key = SHOP_GEO_KEY + typeId;
+            List<Shop> value = entry.getValue();
+            for (Shop shop : value) {
+                stringRedisTemplate.opsForGeo().add(
+                        key, new Point(shop.getX(), shop.getY()), shop.getId().toString());
+            }
+        }
+
     }
 }

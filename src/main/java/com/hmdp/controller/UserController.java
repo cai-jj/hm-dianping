@@ -105,5 +105,17 @@ public class UserController {
         return Result.ok(userDTO);
     }
 
+    //签到功能
+    @PostMapping("/sign")
+    public Result sign() {
+        return userService.sign();
+    }
+
+    //统计本月连续签到次数
+    @GetMapping("sign/count")
+    public Result singCount() {
+        return userService.signCount();
+    }
+
 
 }

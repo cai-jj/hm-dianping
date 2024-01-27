@@ -394,6 +394,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
         //获取代理对象
         currentProxy = (VoucherOrderServiceImpl) AopContext.currentProxy();
+        System.out.println("代理对象：" + currentProxy);
         return Result.ok(orderId);
     }
 

@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.unit.DataUnit;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.RandomUtil;
@@ -14,7 +15,9 @@ import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +26,9 @@ import javax.servlet.http.HttpSession;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -153,6 +158,50 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         stringRedisTemplate.expire(tokenKey, LOGIN_USER_TTL, TimeUnit.MINUTES);
         // 8.返回token
         return Result.ok(token);
+    }
+
+
+    @Override
+    public Result sign() {
+        Long userId = UserHolder.getUser().getId();
+        //当天是这个月的第几天
+        LocalDateTime now = LocalDateTime.now();
+        System.out.println(now);
+        String prefix = now.format(DateTimeFormatter.ofPattern("yyyyMM"));
+        System.out.println(prefix);
+        int dayOfMonth = now.getDayOfMonth();
+        String key = USER_SIGN_KEY + userId + ":" + prefix;
+        stringRedisTemplate.opsForValue().setBit(key, dayOfMonth - 1, true);
+        return Result.ok();
+    }
+
+    @Override
+    public Result signCount() {
+        Long userId = UserHolder.getUser().getId();
+        LocalDateTime now = LocalDateTime.now();
+        //今天是本月的第几天
+        int dayOfMonth = now.getDayOfMonth();
+        String prefix = now.format(DateTimeFormatter.ofPattern("yyyyMM"));
+        String key = USER_SIGN_KEY + userId + ":" +  prefix;
+        List<Long> result = stringRedisTemplate.opsForValue().bitField(key,
+                BitFieldSubCommands.create().get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0));
+        if(result == null || CollUtil.isEmpty(result)) {
+            return Result.ok();
+        }
+        Long num = result.get(0);
+        if(num == null || num == 0) return Result.ok(0);
+        //统计签到次数
+        int count = 0;
+        while(true) {
+            if((num & 1) != 0) {
+                count++;
+                num = num >> 1;
+            } else {
+                break;
+            }
+        }
+
+        return Result.ok(count);
     }
 
     private User createUserWithPhone(String phone) {
