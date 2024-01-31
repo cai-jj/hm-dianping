@@ -137,6 +137,22 @@ class HmDianPingApplicationTests {
                         key, new Point(shop.getX(), shop.getY()), shop.getId().toString());
             }
         }
+    }
+
+    //测试UV统计
+    @Test
+    void testHyperLogLog() {
+        String[] values = new String[1000];
+        int j = 0;
+        for (int i = 0; i < 1000000; i++) {
+            j = i % 1000;
+            values[j] = "user_" + i;
+            if(j == 999) {
+                stringRedisTemplate.opsForHyperLogLog().add("u1", values);
+            }
+        }
+        Long ans = stringRedisTemplate.opsForHyperLogLog().size("u1");
+        System.out.println(ans);
 
     }
 }
